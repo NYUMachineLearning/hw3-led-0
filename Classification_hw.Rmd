@@ -1,0 +1,83 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, include=FALSE}
+library(caret)
+library(ROCR)
+library(pROC)
+library(MASS)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(ggfortify)
+library(glmnet)
+library(tidyverse)
+library(LogicReg)
+library(mlbench)
+```
+
+#Homework:
+
+I use boosted logistic regression because it is a good fit for this problem: predicting two categories from numerical parameters of the data. 
+```{r}
+
+data(BreastCancer)
+BreastCancer <- na.omit(BreastCancer)
+BreastCancer
+
+trainSize <- floor(0.75 * nrow(BreastCancer))
+set.seed(404)
+trainPos <- sample(seq_len(nrow(BreastCancer)), size = trainSize)
+trainClassifier <- BreastCancer[trainPos,]
+testClassifier <- BreastCancer[-trainPos,]
+
+```
+
+```{r}
+
+trainClassifierLog <- trainClassifier[c(which(trainClassifier$Class== "benign"),
+                                           which(trainClassifier$Class == "malignant")),]
+testClassifierLog <- testClassifier[c(which(testClassifier$Class == "benign"),
+                                         which(testClassifier$Class == "malignant")),]
+
+trainClassifierLog$Class <- factor(trainClassifierLog$Class)
+testClassifierLog$Class <- factor(testClassifierLog$Class)
+
+ctrl <- trainControl(method = "repeatedcv", repeats = 20, classProbs = T, savePredictions = T)
+
+logisticRegression <- train(Class~ Cl.thickness + Cell.size + Cell.shape + Marg.adhesion +
+                            Epith.c.size + Bare.nuclei + Bl.cromatin + Normal.nucleoli + Mitoses, 
+                            data = trainClassifierLog, method = "LogitBoost", 
+                            family= "binomial", trControl = ctrl)
+
+logisticRegression
+
+```
+
+ROC
+```{r message=FALSE, warning=FALSE}
+plot(x = roc(predictor = logisticRegression$pred$benign,
+             response = logisticRegression$pred$obs)$specificities, 
+     y = roc(predictor = logisticRegression$pred$benign, 
+             response = logisticRegression$pred$obs)$sensitivities,
+     col= "blue", xlim = c(1, 0), type ="l", ylab = "Sensitivity",
+     xlab = "Specificity")
+
+legend("bottomright", legend = paste("Benign v Malignant --", 
+                                     roc(predictor = logisticRegression$pred$benign,
+                                         response = logisticRegression$pred$obs)$auc,
+                                     sep = ""), col = c("blue"), fill = c("blue"))
+```
+
+Test
+```{r}
+logisticRegressionPredictClass <- predict(logisticRegression, 
+                                             newdata = testClassifierLog)
+
+confusionMatrix(logisticRegressionPredictClass, 
+                reference = testClassifierLog$Class)
+```
